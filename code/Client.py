@@ -91,6 +91,7 @@ class Client:
 	
 	def playMovie(self):
 		"""Play button handler."""
+		
 		self.sendRtspRequest(self.PLAY)
 		reply = self.recvRtspReply()
 
@@ -106,7 +107,9 @@ class Client:
 	
 	def updateMovie(self, imageFile):
 		"""Update the image file as video frame in the GUI."""
-	#TODO
+		frame = ImageTk.PhotoImage(Image.open(imageFile))
+		self.label.configure(image=frame, height=300)
+		self.label.image = frame
 		
 	def connectToServer(self):
 		"""Connect to the Server. Start a new RTSP/TCP session."""
