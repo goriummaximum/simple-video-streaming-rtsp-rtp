@@ -34,6 +34,7 @@ class Client:
 		self.teardownAcked = 0
 		self.connectToServer()
 		self.frameNbr = 0
+		self.recvRtpPacket = RtpPacket()
 		
 	# THIS GUI IS JUST FOR REFERENCE ONLY, STUDENTS HAVE TO CREATE THEIR OWN GUI 	
 	def createWidgets(self):
@@ -70,41 +71,46 @@ class Client:
 		"""Setup button handler."""
 		self.sendRtspRequest(self.SETUP)
 		reply = self.recvRtspReply()
+		print(reply)
 		self.sessionId = self.parseRtspReply(reply)
-		self.openRtpPort()
+		#self.openRtpPort()
 
-		print(self.sessionId)
+		rtpWorker = threading.Thread(target=self.openRtpPort) 
+		rtpWorker.start()
 
 	def exitClient(self):
 		"""Teardown button handler."""
 		self.sendRtspRequest(self.TEARDOWN)
 		reply = self.recvRtspReply()
-		self.rtpSocket_client.close()
-
 		print(reply)
+		if (reply.split('\n')[0] == "RTSP/1.0 200 OK"):
+			self.teardownAcked = 1
+			self.rtpSocket_client.close()
 
 	def pauseMovie(self):
 		"""Pause button handler."""
 		self.sendRtspRequest(self.PAUSE)
 		reply = self.recvRtspReply()
-
 		print(reply)
 	
 	def playMovie(self):
 		"""Play button handler."""
-		
 		self.sendRtspRequest(self.PLAY)
 		reply = self.recvRtspReply()
-
 		print(reply)
 	
 	def listenRtp(self):		
-		"""Listen for RTP packets."""
-		#TODO
+		"""Listen for RTP packets and decode."""
+		while True:
+			data, address = self.rtpSocket_client.recvfrom(1024)
+			if (address[0] != self.serverAddr and address[1] != self.serverPort):
+				continue
+			self.recvRtpPacket.decode(data)
+			print(self.recvRtpPacket.header)
 					
 	def writeFrame(self, data):
 		"""Write the received frame to a temp image file. Return the image file."""
-	#TODO
+		#TODO
 	
 	def updateMovie(self, imageFile):
 		"""Update the image file as video frame in the GUI."""
@@ -140,24 +146,35 @@ class Client:
 			self.rtspSocket_client.sendall(bytes(requestPacket, "utf-8"))
 		
 	
-	
 	def recvRtspReply(self):
 		"""Receive RTSP reply from the server."""
 		return self.rtspSocket_client.recv(256).decode("utf-8")
 	
 	def parseRtspReply(self, data):
-		"""Parse the RTSP reply from the server."""
-		replayLines = data.split('\n')
-		return int(replayLines[2].split(' ')[1])
+		"""Parse the RTSP reply from the server to get session ID."""
+		replyLines = data.split('\n')
+		return int(replyLines[2].split(' ')[1])
 
 	
 	def openRtpPort(self):
 		"""Open RTP socket binded to a specified port."""
-		self.rtpSocket_client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-		self.rtpSocket_client.settimeout(0.5)
+		while True:
+			if (self.teardownAcked == 1):
+				self.teardownAcked = 0
+				break
+			
+			try:
+				self.rtpSocket_client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+				self.rtpSocket_client.bind(('', self.rtpPort))
+				self.rtpSocket_client.settimeout(0.5)
+				self.listenRtp()
+			except Exception as err:
+				print(err)
+
 
 	def handler(self):
 		"""Handler on explicitly closing the GUI window."""
+		self.teardownAcked == 1
 		self.rtpSocket_client.close()
 		self.rtspSocket_client.close()
 		self.master.destroy()
