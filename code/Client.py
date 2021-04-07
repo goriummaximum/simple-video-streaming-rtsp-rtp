@@ -79,6 +79,7 @@ class Client:
 		"""Teardown button handler."""
 		self.sendRtspRequest(self.TEARDOWN)
 		reply = self.recvRtspReply()
+		self.rtpSocket_client.close()
 
 		print(reply)
 
@@ -154,4 +155,7 @@ class Client:
 
 	def handler(self):
 		"""Handler on explicitly closing the GUI window."""
+		self.rtpSocket_client.close()
+		self.rtspSocket_client.close()
 		self.master.destroy()
+		sys.exit()

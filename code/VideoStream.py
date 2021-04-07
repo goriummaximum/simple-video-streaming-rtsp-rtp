@@ -6,7 +6,7 @@ class VideoStream:
 		except:
 			raise IOError
 		self.frameNum = 0
-		
+
 	def nextFrame(self):
 		"""Get next frame."""
 		data = self.file.read(5) # Get the framelength from the first 5 bits
@@ -17,7 +17,7 @@ class VideoStream:
 			data = self.file.read(framelength)
 			self.frameNum += 1
 		return data
-		
+
 	def frameNbr(self):
 		"""Get frame number."""
 		return self.frameNum
