@@ -1,9 +1,11 @@
 from tkinter import *
 import tkinter.messagebox
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageFile
 import socket, threading, sys, traceback, os
 
 from RtpPacket import RtpPacket
+
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 CACHE_FILE_NAME = "cache-"
 CACHE_FILE_EXT = ".jpg"
@@ -28,6 +30,7 @@ class Client:
 		self.serverPort = int(serverport)
 		self.rtpPort = int(rtpport)
 		self.fileName = filename
+		self.cacheFile = ""
 		self.rtspSeq = 0
 		self.sessionId = 0
 		self.requestSent = -1
@@ -73,7 +76,6 @@ class Client:
 		reply = self.recvRtspReply()
 		print(reply)
 		self.sessionId = self.parseRtspReply(reply)
-		#self.openRtpPort()
 
 		rtpWorker = threading.Thread(target=self.openRtpPort) 
 		rtpWorker.start()
@@ -85,6 +87,8 @@ class Client:
 		print(reply)
 		if (reply.split('\n')[0] == "RTSP/1.0 200 OK"):
 			self.teardownAcked = 1
+			if os.path.exists(self.cacheFile):
+				os.remove(self.cacheFile)
 			self.rtpSocket_client.close()
 
 	def pauseMovie(self):
@@ -102,15 +106,24 @@ class Client:
 	def listenRtp(self):		
 		"""Listen for RTP packets and decode."""
 		while True:
-			data, address = self.rtpSocket_client.recvfrom(1024)
+			data, address = self.rtpSocket_client.recvfrom(16384)
+			"""
 			if (address[0] != self.serverAddr and address[1] != self.serverPort):
 				continue
+			"""
 			self.recvRtpPacket.decode(data)
-			print(self.recvRtpPacket.header)
+			self.cacheFile = self.writeFrame(self.recvRtpPacket.getPayload())
+			self.updateMovie(self.cacheFile)
+			print(self.recvRtpPacket.seqNum())
 					
 	def writeFrame(self, data):
 		"""Write the received frame to a temp image file. Return the image file."""
-		#TODO
+		cacheFile = CACHE_FILE_NAME + str(self.sessionId) + CACHE_FILE_EXT
+		f = open(cacheFile, "wb")
+		f.write(data)
+		f.close()
+
+		return cacheFile
 	
 	def updateMovie(self, imageFile):
 		"""Update the image file as video frame in the GUI."""
@@ -175,6 +188,8 @@ class Client:
 	def handler(self):
 		"""Handler on explicitly closing the GUI window."""
 		self.teardownAcked == 1
+		if os.path.exists(self.cacheFile):
+			os.remove(self.cacheFile)
 		self.rtpSocket_client.close()
 		self.rtspSocket_client.close()
 		self.master.destroy()
