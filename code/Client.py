@@ -183,7 +183,8 @@ class Client:
 				self.listenRtp()
 			except Exception as err:
 				print(err)
-
+				if (str(err) == "[Errno 9] Bad file descriptor"):
+					break
 
 	def handler(self):
 		"""Handler on explicitly closing the GUI window."""
