@@ -121,7 +121,6 @@ class Client:
 		"""Listen for RTP packets and decode."""
 		while True:
 			data, address = self.rtpSocket_client.recvfrom(16384)
-			if (data):
 
 			self.recvRtpPacket.decode(data)
 			self.cacheFile = self.writeFrame(self.recvRtpPacket.getPayload())
