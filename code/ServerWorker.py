@@ -124,7 +124,6 @@ class ServerWorker:
 			data = self.clientInfo['videoStream'].nextFrame()
 			if data: 
 				frameNumber = self.clientInfo['videoStream'].frameNbr()
-				print("Frame num: " + str(frameNumber))
 				self.clientInfo['totalSendPacketCount'] += 1
 				try:
 					address = self.clientInfo['rtspSocket'][1][0]
