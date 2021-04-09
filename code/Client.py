@@ -14,7 +14,6 @@ class NetworkStatistics:
 	def __init__(self):
 		self.lossRate = 0.0
 		self.averageDownRate = 0.0
-
 	def computeLoss(self, sendingFrameNum, receiveFrameNum):
 		self.lossRate = receiveFrameNum / sendingFrameNum
 
@@ -80,7 +79,7 @@ class Client:
 		
 		# Create a label to display the movie
 		self.label = Label(self.master, height=19)
-		self.label.grid(row=0, column=0, columnspan=4, sticky=W+E+N+S, padx=5, pady=5) 
+		self.label.grid(row=0, column=0, columnspan=4, sticky=W+E+N+S, padx=5, pady=5)
 	
 	def setupMovie(self):
 		"""Setup button handler."""
@@ -184,22 +183,17 @@ class Client:
 		return self.rtspSocket_client.recv(256).decode("utf-8")
 	
 	def parseRtspReply(self, data):
-		"""Parse the RTSP reply from the server to get session ID."""
+		"""Parse the RTSP reply from the server."""
 		replyLines = data.split('\n')
 		replyEle = []
 		for line in replyLines:
 			replyEle.append(line.split(' '))
-
 		return replyEle
 
 	
 	def openRtpPort(self):
 		"""Open RTP socket binded to a specified port."""
 		while True:
-			if (self.teardownAcked == 1):
-				self.teardownAcked = 0
-				break
-			
 			try:
 				self.rtpSocket_client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 				self.rtpSocket_client.bind(('', self.rtpPort))
@@ -207,11 +201,11 @@ class Client:
 				self.listenRtp()
 			except Exception as err:
 				print(err)
-
+				if (str(err) == "[Errno 9] Bad file descriptor"):
+					break
 
 	def handler(self):
 		"""Handler on explicitly closing the GUI window."""
-		self.teardownAcked == 1
 		if os.path.exists(self.cacheFile):
 			os.remove(self.cacheFile)
 		self.rtpSocket_client.close()
