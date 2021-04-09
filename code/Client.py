@@ -14,6 +14,7 @@ class NetworkStatistics:
 	def __init__(self):
 		self.lossRate = 0.0
 		self.averageDownRate = 0.0
+		
 	def computeLoss(self, sendingFrameNum, receiveFrameNum):
 		self.lossRate = receiveFrameNum / sendingFrameNum
 
@@ -21,16 +22,6 @@ class NetworkStatistics:
 		pass
 
 class Client:
-	INIT = 0
-	READY = 1
-	PLAYING = 2
-	state = INIT
-	
-	SETUP = 0
-	PLAY = 1
-	PAUSE = 2
-	TEARDOWN = 3
-	
 	# Initiation..
 	def __init__(self, master, serveraddr, serverport, rtpport, filename):
 		self.master = master
@@ -49,6 +40,16 @@ class Client:
 		self.frameNbr = 0
 		self.recvRtpPacket = RtpPacket()
 		self.networkStat = NetworkStatistics()
+
+		self.INIT = 0
+		self.READY = 1
+		self.PLAYING = 2
+		self.state = self.INIT
+	
+		self.SETUP = 0
+		self.PLAY = 1
+		self.PAUSE = 2
+		self.TEARDOWN = 3
 		
 	# THIS GUI IS JUST FOR REFERENCE ONLY, STUDENTS HAVE TO CREATE THEIR OWN GUI 	
 	def createWidgets(self):
@@ -90,22 +91,24 @@ class Client:
 			reply = self.recvRtspReply()
 			print(reply)
 
-			#replyEle = self.parseRtspReply(reply)
-			#self.sessionId = replyEle[2][1]
-			#self.totalFrameNum = replyEle[3][1]
+			replyEle = self.parseRtspReply(reply)
+			self.sessionId = replyEle[2][1]
+			self.totalFrameNum = replyEle[3][1]
 
 			rtpWorker = threading.Thread(target=self.openRtpPort) 
 			rtpWorker.start()
 
 	def exitClient(self):
 		"""Teardown button handler."""
-		self.sendRtspRequest(self.TEARDOWN)
-		reply = self.recvRtspReply()
-		print(reply)
-		if (reply.split('\n')[0] == "RTSP/1.0 200 OK"):
-			if os.path.exists(self.cacheFile):
-				os.remove(self.cacheFile)
-			self.rtpSocket_client.close()
+		if (self.state == self.READY or self.state == self.PLAYING):
+			self.state = self.INIT
+			self.sendRtspRequest(self.TEARDOWN)
+			reply = self.recvRtspReply()
+			print(reply)
+			if (reply.split('\n')[0] == "RTSP/1.0 200 OK"):
+				if os.path.exists(self.cacheFile):
+					os.remove(self.cacheFile)
+				self.rtpSocket_client.close()
 
 	def pauseMovie(self):
 		"""Pause button handler."""
