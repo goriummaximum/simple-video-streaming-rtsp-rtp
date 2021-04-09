@@ -1,5 +1,6 @@
 from tkinter import *
 import tkinter.messagebox
+from tkinter.ttk import Progressbar
 from PIL import Image, ImageTk, ImageFile
 import socket, threading, sys, traceback, os
 
@@ -81,7 +82,27 @@ class Client:
 		# Create a label to display the movie
 		self.label = Label(self.master, height=19)
 		self.label.grid(row=0, column=0, columnspan=4, sticky=W+E+N+S, padx=5, pady=5)
-	
+
+		# Create a remaining timer
+		self.time = Label(self.master, text="Time Left: ", width=8, heigh=2)
+		self.time.grid(row=2, column=3, padx=0, pady=0)
+
+		# Create a progress bar
+		self.progress = Progressbar(self.master, orient=HORIZONTAL, length=100, mode='determinate')
+		self.progress.grid(row=2, column=0, columnspan=1, padx=2, pady=0)
+		
+		# Create forward button
+		self.forward = Button(self.master, width=10, padx=3, pady=3)
+		self.forward["text"] = "Forward"
+		self.forward["command"] =  self.forwardMovie
+		self.forward.grid(row=2, column=1, padx=2, pady=2)
+
+		# Create backward button
+		self.backward = Button(self.master, width=10, padx=3, pady=3)
+		self.backward["text"] = "Backward"
+		self.backward["command"] =  self.backwardMovie
+		self.backward.grid(row=2, column=2, padx=2, pady=2)
+
 	def setupMovie(self):
 		"""Setup button handler."""
 		if (self.state == self.INIT):
@@ -93,7 +114,9 @@ class Client:
 
 			replyEle = self.parseRtspReply(reply)
 			self.sessionId = replyEle[2][1]
-			self.totalFrameNum = replyEle[3][1]
+			self.totalFrameNum = int(replyEle[3][1])
+			self.totalTime = 0.05 * self.totalFrameNum
+			self.progress.configure(maximum=self.totalTime)
 
 			rtpWorker = threading.Thread(target=self.openRtpPort) 
 			rtpWorker.start()
@@ -126,6 +149,14 @@ class Client:
 			self.sendRtspRequest(self.PLAY)
 			reply = self.recvRtspReply()
 			print(reply)
+
+	def forwardMovie(self):
+		if (self.state == self.PLAYING or self.state == self.PAUSE):
+			print("bruh")
+
+	def backwardMovie(self):
+		if (self.state == self.PLAYING or self.state == self.PAUSE):
+			print("bruh")
 	
 	def listenRtp(self):		
 		"""Listen for RTP packets and decode."""
@@ -136,6 +167,24 @@ class Client:
 				self.recvRtpPacket.decode(data)
 				self.cacheFile = self.writeFrame(self.recvRtpPacket.getPayload())
 				self.updateMovie(self.cacheFile)
+
+				currentFrameNbr = self.recvRtpPacket.seqNum()
+				current = self.totalTime - 0.05 * currentFrameNbr
+				currMin = current / 60
+				currSec = current % 60
+				
+				self.progress['value'] = 0.05 * currentFrameNbr
+
+				if currMin < 10:
+					self.time.configure(text="Time Left: 0%d:%d" % (currMin, currSec), width=12, heigh=2)
+					if currSec < 10:
+						self.time.configure(text="Time Left: 0%d:0%d" % (currMin, currSec), width=12, heigh=2)
+
+				else:
+					self.time.configure(text="Time Left: %d:%d" % (currMin, currSec), width=12, heigh=2)
+					if currSec < 10:
+						self.time.configure(text="Time Left: %d:0%d" % (currMin, currSec), width=12, heigh=2)
+
 				print(self.recvRtpPacket.timestamp())
 					
 	def writeFrame(self, data):
