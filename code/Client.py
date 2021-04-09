@@ -14,13 +14,11 @@ class NetworkStatistics:
 	def __init__(self):
 		self.lossRate = 0.0
 		self.averageDownRate = 0.0
-	
 	def computeLoss(self, sendingFrameNum, receiveFrameNum):
 		self.lossRate = receiveFrameNum / sendingFrameNum
 
 	def exportLogFile(self):
 		pass
-
 
 class Client:
 	INIT = 0
@@ -85,15 +83,19 @@ class Client:
 	
 	def setupMovie(self):
 		"""Setup button handler."""
-		self.sendRtspRequest(self.SETUP)
-		reply = self.recvRtspReply()
-		print(reply)
-		replyEle = self.parseRtspReply(reply)
-		self.sessionId = replyEle[2][1]
-		self.totalFrameNum = replyEle[3][1]
+		if (self.state == self.INIT):
+			self.state = self.READY
+			self.sendRtspRequest(self.SETUP)
 
-		rtpWorker = threading.Thread(target=self.openRtpPort)
-		rtpWorker.start()
+			reply = self.recvRtspReply()
+			print(reply)
+
+			#replyEle = self.parseRtspReply(reply)
+			#self.sessionId = replyEle[2][1]
+			#self.totalFrameNum = replyEle[3][1]
+
+			rtpWorker = threading.Thread(target=self.openRtpPort) 
+			rtpWorker.start()
 
 	def exitClient(self):
 		"""Teardown button handler."""
@@ -107,25 +109,31 @@ class Client:
 
 	def pauseMovie(self):
 		"""Pause button handler."""
-		self.sendRtspRequest(self.PAUSE)
-		reply = self.recvRtspReply()
-		print(reply)
+		if (self.state == self.PLAYING):
+			self.state = self.READY
+			self.sendRtspRequest(self.PAUSE)
+			reply = self.recvRtspReply()
+			print(reply)
+
 	
 	def playMovie(self):
 		"""Play button handler."""
-		self.sendRtspRequest(self.PLAY)
-		reply = self.recvRtspReply()
-		print(reply)
+		if (self.state == self.READY):
+			self.state = self.PLAYING
+			self.sendRtspRequest(self.PLAY)
+			reply = self.recvRtspReply()
+			print(reply)
 	
 	def listenRtp(self):		
 		"""Listen for RTP packets and decode."""
 		while True:
 			data, address = self.rtpSocket_client.recvfrom(16384)
 
-			self.recvRtpPacket.decode(data)
-			self.cacheFile = self.writeFrame(self.recvRtpPacket.getPayload())
-			self.updateMovie(self.cacheFile)
-			print(self.recvRtpPacket.timestamp())
+			if (data):
+				self.recvRtpPacket.decode(data)
+				self.cacheFile = self.writeFrame(self.recvRtpPacket.getPayload())
+				self.updateMovie(self.cacheFile)
+				print(self.recvRtpPacket.timestamp())
 					
 	def writeFrame(self, data):
 		"""Write the received frame to a temp image file. Return the image file."""
