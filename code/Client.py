@@ -10,6 +10,17 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 CACHE_FILE_NAME = "cache-"
 CACHE_FILE_EXT = ".jpg"
 
+class NetworkStatistics:
+	def __init__(self):
+		self.lossRate = 0.0
+		self.averageDownRate = 0.0
+
+	def computeLoss(self, sendingFrameNum, receiveFrameNum):
+		self.lossRate = receiveFrameNum / sendingFrameNum
+
+	def exportLogFile(self):
+		pass
+
 class Client:
 	INIT = 0
 	READY = 1
@@ -38,6 +49,7 @@ class Client:
 		self.connectToServer()
 		self.frameNbr = 0
 		self.recvRtpPacket = RtpPacket()
+		self.networkStat = NetworkStatistics()
 		
 	# THIS GUI IS JUST FOR REFERENCE ONLY, STUDENTS HAVE TO CREATE THEIR OWN GUI 	
 	def createWidgets(self):
@@ -72,13 +84,19 @@ class Client:
 	
 	def setupMovie(self):
 		"""Setup button handler."""
-		self.sendRtspRequest(self.SETUP)
-		reply = self.recvRtspReply()
-		print(reply)
-		self.sessionId = self.parseRtspReply(reply)
+		if (self.state == self.INIT):
+			self.state = self.READY
+			self.sendRtspRequest(self.SETUP)
 
-		rtpWorker = threading.Thread(target=self.openRtpPort) 
-		rtpWorker.start()
+			reply = self.recvRtspReply()
+			print(reply)
+
+			#replyEle = self.parseRtspReply(reply)
+			#self.sessionId = replyEle[2][1]
+			#self.totalFrameNum = replyEle[3][1]
+
+			rtpWorker = threading.Thread(target=self.openRtpPort) 
+			rtpWorker.start()
 
 	def exitClient(self):
 		"""Teardown button handler."""
@@ -86,35 +104,37 @@ class Client:
 		reply = self.recvRtspReply()
 		print(reply)
 		if (reply.split('\n')[0] == "RTSP/1.0 200 OK"):
-			self.teardownAcked = 1
 			if os.path.exists(self.cacheFile):
 				os.remove(self.cacheFile)
 			self.rtpSocket_client.close()
 
 	def pauseMovie(self):
 		"""Pause button handler."""
-		self.sendRtspRequest(self.PAUSE)
-		reply = self.recvRtspReply()
-		print(reply)
+		if (self.state == self.PLAYING):
+			self.state = self.READY
+			self.sendRtspRequest(self.PAUSE)
+			reply = self.recvRtspReply()
+			print(reply)
+
 	
 	def playMovie(self):
 		"""Play button handler."""
-		self.sendRtspRequest(self.PLAY)
-		reply = self.recvRtspReply()
-		print(reply)
+		if (self.state == self.READY):
+			self.state = self.PLAYING
+			self.sendRtspRequest(self.PLAY)
+			reply = self.recvRtspReply()
+			print(reply)
 	
 	def listenRtp(self):		
 		"""Listen for RTP packets and decode."""
 		while True:
 			data, address = self.rtpSocket_client.recvfrom(16384)
-			"""
-			if (address[0] != self.serverAddr and address[1] != self.serverPort):
-				continue
-			"""
-			self.recvRtpPacket.decode(data)
-			self.cacheFile = self.writeFrame(self.recvRtpPacket.getPayload())
-			self.updateMovie(self.cacheFile)
-			print(self.recvRtpPacket.seqNum())
+
+			if (data):
+				self.recvRtpPacket.decode(data)
+				self.cacheFile = self.writeFrame(self.recvRtpPacket.getPayload())
+				self.updateMovie(self.cacheFile)
+				print(self.recvRtpPacket.timestamp())
 					
 	def writeFrame(self, data):
 		"""Write the received frame to a temp image file. Return the image file."""
@@ -166,7 +186,11 @@ class Client:
 	def parseRtspReply(self, data):
 		"""Parse the RTSP reply from the server to get session ID."""
 		replyLines = data.split('\n')
-		return int(replyLines[2].split(' ')[1])
+		replyEle = []
+		for line in replyLines:
+			replyEle.append(line.split(' '))
+
+		return replyEle
 
 	
 	def openRtpPort(self):
