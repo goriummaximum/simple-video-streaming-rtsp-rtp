@@ -3,6 +3,8 @@ import tkinter.messagebox
 from tkinter.ttk import Progressbar
 from PIL import Image, ImageTk, ImageFile
 import socket, threading, sys, traceback, os
+from time import time
+from datetime import datetime
 
 from RtpPacket import RtpPacket
 
@@ -14,13 +16,31 @@ CACHE_FILE_EXT = ".jpg"
 class NetworkStatistics:
 	def __init__(self):
 		self.lossRate = 0.0
-		self.averageDownRate = 0.0
-		
-	def computeLoss(self, sendingFrameNum, receiveFrameNum):
-		self.lossRate = receiveFrameNum / sendingFrameNum
+		self.receivedPacketCount = 0
+		self.totalADR = 0
+		self.ADR = 0
+		self.startDate = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+		self.startTime = time()
 
-	def exportLogFile(self):
-		pass
+	def computeLoss(self, sendingFrameNum, receiveFrameNum):
+		self.lossRate = ((sendingFrameNum - receiveFrameNum) / sendingFrameNum) * 100
+
+	def computeADR(self):
+		self.ADR = self.totalADR / self.receivedPacketCount
+
+	def exportLogFile(self, sessionId):
+		writeList = [
+					"Session ID: " + str(sessionId),
+					"\n" + self.startDate + " - " + datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+					"\nSession time: " + str(round(time() - self.startTime, 1)) + " (s)",
+					"\nPacket loss rate: " + str(round(self.lossRate, 1)) + " (%)",
+					"\nAverage downloading rate: " + str(round(self.ADR, 1)) + " (Bps)"
+				]
+
+		fileName = "log-" + str(sessionId) + ".txt"
+		logFile = open(fileName, "w")
+		logFile.writelines(writeList)
+		logFile.close()
 
 class Client:
 	# Initiation..
@@ -40,7 +60,6 @@ class Client:
 		self.connectToServer()
 		self.frameNbr = 0
 		self.recvRtpPacket = RtpPacket()
-		self.networkStat = NetworkStatistics()
 
 		self.INIT = 0
 		self.READY = 1
@@ -78,7 +97,7 @@ class Client:
 		self.teardown["text"] = "Teardown"
 		self.teardown["command"] =  self.exitClient
 		self.teardown.grid(row=1, column=3, padx=2, pady=2)
-		
+
 		# Create a label to display the movie
 		self.label = Label(self.master, height=19)
 		self.label.grid(row=0, column=0, columnspan=4, sticky=W+E+N+S, padx=5, pady=5)
@@ -121,17 +140,26 @@ class Client:
 			rtpWorker = threading.Thread(target=self.openRtpPort) 
 			rtpWorker.start()
 
+			self.networkStat = NetworkStatistics()
+
 	def exitClient(self):
 		"""Teardown button handler."""
 		if (self.state == self.READY or self.state == self.PLAYING):
 			self.state = self.INIT
 			self.sendRtspRequest(self.TEARDOWN)
 			reply = self.recvRtspReply()
+			
+			replyEle = self.parseRtspReply(reply)
+			totalSendPacketCount = int(replyEle[3][1])
+
 			print(reply)
 			if (reply.split('\n')[0] == "RTSP/1.0 200 OK"):
 				if os.path.exists(self.cacheFile):
 					os.remove(self.cacheFile)
 				self.rtpSocket_client.close()
+				self.networkStat.computeLoss(totalSendPacketCount, self.networkStat.receivedPacketCount)
+				self.networkStat.computeADR()
+				self.networkStat.exportLogFile(self.sessionId)
 
 	def pauseMovie(self):
 		"""Pause button handler."""
@@ -161,7 +189,9 @@ class Client:
 	def listenRtp(self):		
 		"""Listen for RTP packets and decode."""
 		while True:
+			startTime = time()
 			data, address = self.rtpSocket_client.recvfrom(16384)
+			endTime = time()
 
 			if (data):
 				self.recvRtpPacket.decode(data)
@@ -186,6 +216,8 @@ class Client:
 						self.time.configure(text="Time Left: %d:0%d" % (currMin, currSec), width=12, heigh=2)
 
 				print(self.recvRtpPacket.timestamp())
+				self.networkStat.receivedPacketCount += 1
+				self.networkStat.totalADR += (sys.getsizeof(data) / (endTime - startTime))
 					
 	def writeFrame(self, data):
 		"""Write the received frame to a temp image file. Return the image file."""
