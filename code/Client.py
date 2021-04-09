@@ -13,6 +13,7 @@ CACHE_FILE_NAME = "cache-"
 CACHE_FILE_EXT = ".jpg"
 
 class NetworkStatistics:
+	"""Initiate a new sesstion stat for a every new session"""
 	def __init__(self):
 		self.lossRate = 0.0
 		self.receivedPacketCount = 0
@@ -22,10 +23,16 @@ class NetworkStatistics:
 		self.startTime = time()
 
 	def computeLoss(self, sendingFrameNum, receiveFrameNum):
-		self.lossRate = ((sendingFrameNum - receiveFrameNum) / sendingFrameNum) * 100
+		try:
+			self.lossRate = ((sendingFrameNum - receiveFrameNum) / sendingFrameNum) * 100
+		except:
+			None
 
 	def computeADR(self):
-		self.ADR = self.totalADR / self.receivedPacketCount
+		try:
+			self.ADR = self.totalADR / self.receivedPacketCount
+		except:
+			None
 
 	def exportLogFile(self, sessionId):
 		writeList = [
@@ -65,41 +72,65 @@ class Client:
 		self.PLAYING = 2
 		self.state = self.INIT
 	
-		self.SETUP = 0
-		self.PLAY = 1
-		self.PAUSE = 2
-		self.TEARDOWN = 3
+		self.SETUP = 'SETUP'
+		self.PLAY = 'PLAY'
+		self.PAUSE = 'PAUSE'
+		self.TEARDOWN = 'TEARDOWN'
+		self.DESCRIBE = 'DESCRIBE'
 		
-	# THIS GUI IS JUST FOR REFERENCE ONLY, STUDENTS HAVE TO CREATE THEIR OWN GUI 	
+
+	def describeWindow(self, sessionId, fileName, streamType, encodingType, connectionType):
+		window = Toplevel()
+
+		label = Label(window, text="Session ID: " + sessionId)
+		label.pack(fill='x', padx=50, pady=5)
+		label1 = Label(window, text="File name: " + fileName)
+		label1.pack(fill='x', padx=50, pady=5)
+		label2 = Label(window, text="Stream type: !" + streamType)
+		label2.pack(fill='x', padx=50, pady=5)
+		label3 = Label(window, text="Encoding type: !" + encodingType)
+		label3.pack(fill='x', padx=50, pady=5)
+		label4 = Label(window, text="Connection type: !" + connectionType)
+		label4.pack(fill='x', padx=50, pady=5)
+
+		closeButton = Button(window, text="Close", command=window.destroy)
+		closeButton.pack(fill='x')
+
 	def createWidgets(self):
 		"""Build GUI."""
 		# Create Setup button
-		self.setup = Button(self.master, width=20, padx=3, pady=3)
+		self.setup = Button(self.master, width=20, padx=2, pady=3)
 		self.setup["text"] = "Setup"
 		self.setup["command"] = self.setupMovie
-		self.setup.grid(row=1, column=0, padx=2, pady=2)
+		self.setup.grid(row=2, column=0, padx=2, pady=2)
 		
 		# Create Play button		
 		self.start = Button(self.master, width=20, padx=3, pady=3)
 		self.start["text"] = "Play"
 		self.start["command"] = self.playMovie
-		self.start.grid(row=1, column=1, padx=2, pady=2)
+		self.start.grid(row=2, column=1, padx=2, pady=2)
 		
 		# Create Pause button			
 		self.pause = Button(self.master, width=20, padx=3, pady=3)
 		self.pause["text"] = "Pause"
 		self.pause["command"] = self.pauseMovie
-		self.pause.grid(row=1, column=2, padx=2, pady=2)
+		self.pause.grid(row=2, column=2, padx=2, pady=2)
 		
 		# Create Teardown button
 		self.teardown = Button(self.master, width=20, padx=3, pady=3)
 		self.teardown["text"] = "Teardown"
 		self.teardown["command"] =  self.exitClient
-		self.teardown.grid(row=1, column=3, padx=2, pady=2)
+		self.teardown.grid(row=2, column=3, padx=2, pady=2)
+
+		#Create Descibe button
+		self.describe = Button(self.master, width=10, padx=3, pady=3)
+		self.describe["text"] = "Describe"
+		self.describe["command"] = self.describeSession
+		self.describe.grid(row=0, column=0, padx=2, pady=2)
 
 		# Create a label to display the movie
 		self.label = Label(self.master, height=19)
-		self.label.grid(row=0, column=0, columnspan=4, sticky=W+E+N+S, padx=5, pady=5)
+		self.label.grid(row=1, column=0, columnspan=4, sticky=W+E+N+S, padx=5, pady=5)
 	
 	def setupMovie(self):
 		"""Setup button handler."""
@@ -116,7 +147,6 @@ class Client:
 
 			rtpWorker = threading.Thread(target=self.openRtpPort) 
 			rtpWorker.start()
-
 			self.networkStat = NetworkStatistics()
 
 	def exitClient(self):
@@ -155,6 +185,14 @@ class Client:
 			reply = self.recvRtspReply()
 			print(reply)
 	
+	def describeSession(self):
+		"""Describe button handler."""
+		self.sendRtspRequest(self.DESCRIBE)
+		reply = self.recvRtspReply()
+		print(reply)
+		replyEle = self.parseRtspReply(reply)
+		self.describeWindow(replyEle[2][1], replyEle[3][1], replyEle[4][1], replyEle[5][1], replyEle[6][1])
+
 	def listenRtp(self):		
 		"""Listen for RTP packets and decode."""
 		while True:
@@ -195,21 +233,18 @@ class Client:
 	
 	def sendRtspRequest(self, requestCode):
 		"""Send RTSP request to the server."""
-		requestCode_list = ["SETUP", "PLAY", "PAUSE", "TEARDOWN"]
+		self.rtspSeq = self.rtspSeq + 1
+		requestCodetMsg = requestCode + " " + self.fileName + " " + "RTSP/1.0"
+		requestSeqMsg = "\n" + "CSeq:" + " " + str(self.rtspSeq)
+
 		if (requestCode == self.SETUP):
-			self.rtspSeq = self.rtspSeq + 1
-			requesCodetMsg = requestCode_list[requestCode] + " " + self.fileName + " " + "RTSP/1.0"
-			requestSeqMsg = "\n" + "CSeq:" + " " + str(self.rtspSeq)
 			requestHeader = "\n" + "Transport" + " " + "RTP/UDP;" + " " + "client_port=" + " " + str(self.rtpPort)
-			requestPacket = requesCodetMsg + requestSeqMsg + requestHeader
+			requestPacket = requestCodetMsg + requestSeqMsg + requestHeader
 			self.rtspSocket_client.sendall(bytes(requestPacket, "utf-8"))
 	
-		elif (requestCode == self.PLAY or requestCode == self.PAUSE or requestCode == self.TEARDOWN):
-			self.rtspSeq = self.rtspSeq + 1
-			requesCodetMsg = requestCode_list[requestCode] + " " + self.fileName + " " + "RTSP/1.0"
-			requestSeqMsg = "\n" + "CSeq:" + " " + str(self.rtspSeq)
+		elif (requestCode == self.PLAY or requestCode == self.PAUSE or requestCode == self.TEARDOWN or requestCode == self.DESCRIBE):
 			requestSession = "\n" + "Session:" + " " + str(self.sessionId)
-			requestPacket = requesCodetMsg + requestSeqMsg + requestSession
+			requestPacket = requestCodetMsg + requestSeqMsg + requestSession
 			self.rtspSocket_client.sendall(bytes(requestPacket, "utf-8"))
 		
 	
@@ -241,9 +276,24 @@ class Client:
 
 	def handler(self):
 		"""Handler on explicitly closing the GUI window."""
+		if (self.state != self.INIT):
+			self.sendRtspRequest(self.TEARDOWN)
+			reply = self.recvRtspReply()
+			
+			replyEle = self.parseRtspReply(reply)
+			totalSendPacketCount = int(replyEle[3][1])
+
+			if (reply.split('\n')[0] == "RTSP/1.0 200 OK"):
+				self.networkStat.computeLoss(totalSendPacketCount, self.networkStat.receivedPacketCount)
+				self.networkStat.computeADR()
+				self.networkStat.exportLogFile(self.sessionId)
+			
 		if os.path.exists(self.cacheFile):
 			os.remove(self.cacheFile)
-		self.rtpSocket_client.close()
-		self.rtspSocket_client.close()
+		try:
+			self.rtpSocket_client.close()
+			self.rtspSocket_client.close()
+		except:
+			None
 		self.master.destroy()
 		sys.exit()

@@ -9,6 +9,7 @@ class ServerWorker:
 	PLAY = 'PLAY'
 	PAUSE = 'PAUSE'
 	TEARDOWN = 'TEARDOWN'
+	DESCRIBE = 'DESCRIBE'
 	
 	INIT = 0
 	READY = 1
@@ -44,7 +45,7 @@ class ServerWorker:
 		self.requestType = line1[0]
 		
 		# Get the media file name
-		filename = line1[1]
+		self.filename = line1[1]
 		
 		# Get the RTSP sequence number 
 		seq = request[1].split(' ')
@@ -56,7 +57,7 @@ class ServerWorker:
 				print("processing SETUP\n")
 				
 				try:
-					self.clientInfo['videoStream'] = VideoStream(filename)
+					self.clientInfo['videoStream'] = VideoStream(self.filename)
 					self.state = self.READY
 				except IOError:
 					self.replyRtsp(self.FILE_NOT_FOUND_404, seq[1])
@@ -106,6 +107,10 @@ class ServerWorker:
 				self.clientInfo['rtpSocket'].close()
 			except:
 				None
+		
+		elif self.requestType == self.DESCRIBE:
+			print("processing DESCRIBE\n")
+			self.replyRtsp(self.OK_200, seq[1])
 			
 	def sendRtp(self):
 		"""Send RTP packets over UDP."""
@@ -151,13 +156,20 @@ class ServerWorker:
 	def replyRtsp(self, code, seq, totalFrameNum = -1, totalSendPacketCount = -1):
 		"""Send RTSP reply to the client."""
 		if code == self.OK_200:
-			reply = 'RTSP/1.0 200 OK\nCSeq: ' + seq + '\nSession: ' + str(self.clientInfo['session'])
+			try:
+				reply = 'RTSP/1.0 200 OK\nCSeq: ' + seq + '\nSession: ' + str(self.clientInfo['session'])
+			except:
+				reply = 'RTSP/1.0 200 OK\nCSeq: ' + seq + '\nSession: NA'
+
 			if (self.requestType == self.SETUP):
 				reply = reply + '\nTotalFrame: ' + str(totalFrameNum)
 			
 			elif (self.requestType == self.TEARDOWN):
 				reply = reply + '\nTotalSendPacketCount: ' + str(totalSendPacketCount)
 			
+			elif (self.requestType == self.DESCRIBE):
+				reply = reply + '\nFileName: ' + self.filename + '\nStreamType: real-time' + '\nencodingType: MJPEG' + '\nConnectionType: RTP/RTSP1.0'
+
 			connSocket = self.clientInfo['rtspSocket'][0]
 			connSocket.send(reply.encode())
 		
