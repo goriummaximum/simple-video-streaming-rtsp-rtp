@@ -150,10 +150,10 @@ class Client:
 		self.backward.grid(row=3, column=1, padx=2, pady=2)
 
 		#Create Descibe button
-		self.describe = Button(self.master, width=10, padx=3, pady=3)
+		self.describe = Button(self.master, width=10, padx=2, pady=2)
 		self.describe["text"] = "Describe"
 		self.describe["command"] = self.describeSession
-		self.describe.grid(row=0, column=0, padx=2, pady=2)	
+		self.describe.grid(row=0, column=0, padx=2, pady=2, sticky=W)	
 	
 	def setupMovie(self):
 		"""Setup button handler."""
