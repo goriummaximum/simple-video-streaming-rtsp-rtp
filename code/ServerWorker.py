@@ -9,12 +9,21 @@ class ServerWorker:
 	PLAY = 'PLAY'
 	PAUSE = 'PAUSE'
 	TEARDOWN = 'TEARDOWN'
+	FORWARD = 'FORWARD'
+	BACKWARD = 'BACKWARD'
 	DESCRIBE = 'DESCRIBE'
+	
 	
 	INIT = 0
 	READY = 1
 	PLAYING = 2
 	state = INIT
+	skipMovie = 0
+	backMovie = 0
+	flagSkip = 0
+	flagBack = 0
+	currentFrameNbr = 0
+
 
 	OK_200 = 0
 	FILE_NOT_FOUND_404 = 1
@@ -92,7 +101,7 @@ class ServerWorker:
 			if self.state == self.PLAYING:
 				print("processing PAUSE\n")
 				self.state = self.READY
-
+				
 				self.clientInfo['event'].set()
 			
 				self.replyRtsp(self.OK_200, seq[1])
@@ -107,23 +116,56 @@ class ServerWorker:
 				self.clientInfo['rtpSocket'].close()
 			except:
 				None
-		
+
+		# Process DESCRIBE request
 		elif self.requestType == self.DESCRIBE:
 			print("processing DESCRIBE\n")
 			self.replyRtsp(self.OK_200, seq[1])
+
+		# Process FORWARD request
+		elif self.requestType == self.FORWARD:
+			if self.state == self.PLAYING or self.state == self.READY:
+				print("processing FORWARD\n")
+				self.skipMovie = 1
+				self.replyRtsp(self.OK_200, seq[1])
+
+
+		# Process BACKWARD request
+		elif self.requestType == self.BACKWARD:
+			if self.state == self.PLAYING or self.state == self.READY:
+				print("processing BACKWARD\n")
+				self.clientInfo['videoStream'] = VideoStream(self.filename)
+				self.backMovie = 1
+				self.replyRtsp(self.OK_200, seq[1])
+		
 			
 	def sendRtp(self):
 		"""Send RTP packets over UDP."""
 		while True:
 			self.clientInfo['event'].wait(0.05) 
-			
+
 			# Stop sending if request is PAUSE or TEARDOWN
-			if self.clientInfo['event'].isSet(): 
-				break 
+			if self.clientInfo['event'].isSet():
+				break
 				
+			if self.skipMovie == 1:
+				for i in range(1, 50):
+					self.clientInfo['videoStream'].nextFrame()
+					
+				self.skipMovie = 0
+
+			if self.backMovie == 1:
+				for i in range(1, self.currentFrameNbr - 50):
+					self.clientInfo['videoStream'].nextFrame()
+				
+				self.backMovie = 0
+
+			self.currentFrameNbr = self.clientInfo['videoStream'].frameNbr()
 			data = self.clientInfo['videoStream'].nextFrame()
+
 			if data: 
 				frameNumber = self.clientInfo['videoStream'].frameNbr()
+
 				self.clientInfo['totalSendPacketCount'] += 1
 				try:
 					address = self.clientInfo['rtspSocket'][1][0]
