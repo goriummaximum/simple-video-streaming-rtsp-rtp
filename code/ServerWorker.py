@@ -13,7 +13,6 @@ class ServerWorker:
 	BACKWARD = 'BACKWARD'
 	DESCRIBE = 'DESCRIBE'
 	
-	
 	INIT = 0
 	READY = 1
 	PLAYING = 2
@@ -135,7 +134,6 @@ class ServerWorker:
 		elif self.requestType == self.BACKWARD:
 			if self.state == self.PLAYING:
 				print("\nprocessing BACKWARD\n")
-				self.clientInfo['videoStream'] = VideoStream(self.filename)
 				self.backMovie = 1
 				self.replyRtsp(self.OK_200, seq[1])
 		
@@ -156,6 +154,7 @@ class ServerWorker:
 				self.skipMovie = 0
 
 			if self.backMovie == 1:
+				self.clientInfo['videoStream'] = VideoStream(self.filename)
 				for i in range(1, self.currentFrameNbr - 50):
 					self.clientInfo['videoStream'].nextFrame()
 				
