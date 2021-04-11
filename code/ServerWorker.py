@@ -43,7 +43,9 @@ class ServerWorker:
 		while True:            
 			data = connSocket.recv(256)
 			if data:
-				print("Data received:\n" + data.decode("utf-8"))
+				print("C: " + self.clientInfo['rtspSocket'][1][0] + 
+					":" + str(self.clientInfo['rtspSocket'][1][1]) + 
+					"\n" + data.decode("utf-8"))
 				self.processRtspRequest(data.decode("utf-8"))
 	
 	def processRtspRequest(self, data):
@@ -63,7 +65,7 @@ class ServerWorker:
 		if self.requestType == self.SETUP:
 			if self.state == self.INIT:
 				# Update state
-				print("processing SETUP\n")
+				print("\nprocessing SETUP\n")
 				
 				try:
 					self.clientInfo['videoStream'] = VideoStream(self.filename)
@@ -84,7 +86,7 @@ class ServerWorker:
 		# Process PLAY request 		
 		elif self.requestType == self.PLAY:
 			if self.state == self.READY:
-				print("processing PLAY\n")
+				print("\nprocessing PLAY\n")
 				self.state = self.PLAYING
 				
 				# Create a new socket for RTP/UDP
@@ -99,7 +101,7 @@ class ServerWorker:
 		# Process PAUSE request
 		elif self.requestType == self.PAUSE:
 			if self.state == self.PLAYING:
-				print("processing PAUSE\n")
+				print("\nprocessing PAUSE\n")
 				self.state = self.READY
 				
 				self.clientInfo['event'].set()
@@ -108,7 +110,7 @@ class ServerWorker:
 		
 		# Process TEARDOWN request
 		elif self.requestType == self.TEARDOWN:
-			print("processing TEARDOWN\n")
+			print("\nprocessing TEARDOWN\n")
 			self.state = self.INIT
 			self.replyRtsp(self.OK_200, seq[1], totalSendPacketCount=self.clientInfo['totalSendPacketCount'])
 			try:
@@ -119,21 +121,20 @@ class ServerWorker:
 
 		# Process DESCRIBE request
 		elif self.requestType == self.DESCRIBE:
-			print("processing DESCRIBE\n")
+			print("\nprocessing DESCRIBE\n")
 			self.replyRtsp(self.OK_200, seq[1])
 
 		# Process FORWARD request
 		elif self.requestType == self.FORWARD:
-			if self.state == self.PLAYING or self.state == self.READY:
-				print("processing FORWARD\n")
+			if self.state == self.PLAYING:
+				print("\nprocessing FORWARD\n")
 				self.skipMovie = 1
 				self.replyRtsp(self.OK_200, seq[1])
 
-
 		# Process BACKWARD request
 		elif self.requestType == self.BACKWARD:
-			if self.state == self.PLAYING or self.state == self.READY:
-				print("processing BACKWARD\n")
+			if self.state == self.PLAYING:
+				print("\nprocessing BACKWARD\n")
 				self.clientInfo['videoStream'] = VideoStream(self.filename)
 				self.backMovie = 1
 				self.replyRtsp(self.OK_200, seq[1])
@@ -213,6 +214,7 @@ class ServerWorker:
 
 			connSocket = self.clientInfo['rtspSocket'][0]
 			connSocket.send(reply.encode())
+			print("S: \n" + reply + "\n----------")
 		
 		# Error messages
 		elif code == self.FILE_NOT_FOUND_404:

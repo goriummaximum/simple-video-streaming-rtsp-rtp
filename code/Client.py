@@ -35,11 +35,12 @@ class NetworkStatistics:
 		except:
 			None
 
-	def exportLogFile(self, sessionId):
+	def exportLogFile(self, sessionId, CSeq):
 		writeList = [
 					"Session ID: " + str(sessionId),
 					"\n" + self.startDate + " - " + datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
 					"\nSession time: " + str(round(time() - self.startTime, 1)) + " (s)",
+					"\nRequest count: " + str(CSeq),
 					"\nPacket loss rate: " + str(round(self.lossRate, 1)) + " (%)",
 					"\nAverage downloading rate: " + str(round(self.ADR, 1)) + " (Bps)"
 				]
@@ -62,10 +63,8 @@ class Client:
 		self.cacheFile = ""
 		self.rtspSeq = 0
 		self.sessionId = 0
-		self.requestSent = -1
-		self.teardownAcked = 0
-		self.connectToServer()
 		self.frameNbr = 0
+		self.connectToServer()
 		self.recvRtpPacket = RtpPacket()
 
 		self.INIT = 0
@@ -82,19 +81,21 @@ class Client:
 		self.DESCRIBE = 'DESCRIBE'
 		
 
-	def describeWindow(self, sessionId, fileName, streamType, encodingType, connectionType):
+	def describeWindow(self, sessionId, fileName, streamType, encodingType, connectionType, CSeq):
 		window = Toplevel()
 		window.title('Session Info')
 		label = Label(window, text="Session ID: " + sessionId)
 		label.pack(fill='x', padx=50, pady=5)
 		label1 = Label(window, text="File name: " + fileName)
 		label1.pack(fill='x', padx=50, pady=5)
-		label2 = Label(window, text="Stream type: !" + streamType)
+		label2 = Label(window, text="Stream type: " + streamType)
 		label2.pack(fill='x', padx=50, pady=5)
-		label3 = Label(window, text="Encoding type: !" + encodingType)
+		label3 = Label(window, text="Encoding type: " + encodingType)
 		label3.pack(fill='x', padx=50, pady=5)
-		label4 = Label(window, text="Connection type: !" + connectionType)
+		label4 = Label(window, text="Connection type: " + connectionType)
 		label4.pack(fill='x', padx=50, pady=5)
+		label5 = Label(window, text="Requests count: " + str(CSeq))
+		label5.pack(fill='x', padx=50, pady=5)
 
 		closeButton = Button(window, text="Close", command=window.destroy)
 		closeButton.pack(fill='x')
@@ -159,10 +160,9 @@ class Client:
 		"""Setup button handler."""
 		if (self.state == self.INIT):
 			self.state = self.READY
+			self.rtspSeq = 0
 			self.sendRtspRequest(self.SETUP)
-
 			reply = self.recvRtspReply()
-			print(reply)
 
 			replyEle = self.parseRtspReply(reply)
 			self.sessionId = replyEle[2][1]
@@ -185,14 +185,14 @@ class Client:
 			replyEle = self.parseRtspReply(reply)
 			totalSendPacketCount = int(replyEle[3][1])
 
-			print(reply)
 			if (reply.split('\n')[0] == "RTSP/1.0 200 OK"):
-				if os.path.exists(self.cacheFile):
-					os.remove(self.cacheFile)
 				self.rtpSocket_client.close()
 				self.networkStat.computeLoss(totalSendPacketCount, self.networkStat.receivedPacketCount)
 				self.networkStat.computeADR()
-				self.networkStat.exportLogFile(self.sessionId)
+				self.networkStat.exportLogFile(self.sessionId, self.rtspSeq)
+
+			if os.path.exists(self.cacheFile):
+				os.remove(self.cacheFile)
 
 	def pauseMovie(self):
 		"""Pause button handler."""
@@ -200,7 +200,6 @@ class Client:
 			self.state = self.READY
 			self.sendRtspRequest(self.PAUSE)
 			reply = self.recvRtspReply()
-			print(reply)
 
 	
 	def playMovie(self):
@@ -209,27 +208,23 @@ class Client:
 			self.state = self.PLAYING
 			self.sendRtspRequest(self.PLAY)
 			reply = self.recvRtspReply()
-			print(reply)
 
 	def forwardMovie(self):
-		if (self.state == self.PLAYING or self.state == self.PAUSE):
+		if (self.state == self.PLAYING):
 			self.sendRtspRequest(self.FORWARD)
 			reply = self.recvRtspReply()
-			print(reply)
 
 	def backwardMovie(self):
-		if (self.state == self.PLAYING or self.state == self.PAUSE):
+		if (self.state == self.PLAYING):
 			self.sendRtspRequest(self.BACKWARD)
 			reply = self.recvRtspReply()
-			print(reply)
 	
 	def describeSession(self):
 		"""Describe button handler."""
 		self.sendRtspRequest(self.DESCRIBE)
 		reply = self.recvRtspReply()
-		print(reply)
 		replyEle = self.parseRtspReply(reply)
-		self.describeWindow(replyEle[2][1], replyEle[3][1], replyEle[4][1], replyEle[5][1], replyEle[6][1])
+		self.describeWindow(replyEle[2][1], replyEle[3][1], replyEle[4][1], replyEle[5][1], replyEle[6][1], self.rtspSeq)
 
 	def listenRtp(self):		
 		"""Listen for RTP packets and decode."""
@@ -262,6 +257,9 @@ class Client:
 
 				self.networkStat.receivedPacketCount += 1
 				self.networkStat.totalADR += (sys.getsizeof(data) / (endTime - startTime))
+			
+			else:
+				continue
 
 					
 	def writeFrame(self, data):
@@ -292,22 +290,24 @@ class Client:
 		self.rtspSeq = self.rtspSeq + 1
 		requestCodetMsg = requestCode + " " + self.fileName + " " + "RTSP/1.0"
 		requestSeqMsg = "\n" + "CSeq:" + " " + str(self.rtspSeq)
+		requestPayload = ""
 
 		if (requestCode == self.SETUP):
-			requestHeader = "\n" + "Transport" + " " + "RTP/UDP;" + " " + "client_port=" + " " + str(self.rtpPort)
-			requestPacket = requestCodetMsg + requestSeqMsg + requestHeader
-			self.rtspSocket_client.sendall(bytes(requestPacket, "utf-8"))
+			requestPayload = "\n" + "Transport" + " " + "RTP/UDP;" + " " + "client_port=" + " " + str(self.rtpPort)
 	
-		elif (requestCode == self.PLAY or requestCode == self.PAUSE or requestCode == self.TEARDOWN or 
-				requestCode == self.DESCRIBE or requestCode == self.FORWARD or requestCode == self.BACKWARD):
-			requestSession = "\n" + "Session:" + " " + str(self.sessionId)
-			requestPacket = requestCodetMsg + requestSeqMsg + requestSession
-			self.rtspSocket_client.sendall(bytes(requestPacket, "utf-8"))
+		else:
+			requestPayload = "\n" + "Session:" + " " + str(self.sessionId)
+
+		requestPacket = requestCodetMsg + requestSeqMsg + requestPayload
+		self.rtspSocket_client.sendall(bytes(requestPacket, "utf-8"))
+		print("C:\n" + requestPacket)
 		
 	
 	def recvRtspReply(self):
 		"""Receive RTSP reply from the server."""
-		return self.rtspSocket_client.recv(256).decode("utf-8")
+		reply = self.rtspSocket_client.recv(256).decode("utf-8")
+		print("\nS: \n" + reply + "\n----------")
+		return reply
 	
 	def parseRtspReply(self, data):
 		"""Parse the RTSP reply from the server."""
@@ -327,7 +327,6 @@ class Client:
 				self.rtpSocket_client.settimeout(0.5)
 				self.listenRtp()
 			except Exception as err:
-				print(err)
 				if (str(err) == "[Errno 9] Bad file descriptor"):
 					break
 
@@ -343,10 +342,10 @@ class Client:
 			if (reply.split('\n')[0] == "RTSP/1.0 200 OK"):
 				self.networkStat.computeLoss(totalSendPacketCount, self.networkStat.receivedPacketCount)
 				self.networkStat.computeADR()
-				self.networkStat.exportLogFile(self.sessionId)
+				self.networkStat.exportLogFile(self.sessionId, self.rtspSeq)
 			
-		if os.path.exists(self.cacheFile):
-			os.remove(self.cacheFile)
+			if os.path.exists(self.cacheFile):
+				os.remove(self.cacheFile)
 		try:
 			self.rtpSocket_client.close()
 			self.rtspSocket_client.close()
